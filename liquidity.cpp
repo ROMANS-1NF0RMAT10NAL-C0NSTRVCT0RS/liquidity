@@ -8,6 +8,7 @@ char sender_comp_id[64], target_comp_id[64], target_sub_id[64], username[64], pa
 
 #include "die.h"
 
+#include <limits.h>
 #include <math.h>
 #include <ncurses.h>
 #include <quickfix/Field.h>
@@ -37,6 +38,9 @@ char sender_comp_id[64], target_comp_id[64], target_sub_id[64], username[64], pa
 #include <quickfix/fix44/RequestForPositionsAck.h>
 #include <quickfix/fix44/PositionReport.h>
 #include <map>
+
+long lmin(const long a, const long b){
+	if(a>b) return b; else return a; }
 
 unsigned int next_id=0;
 
@@ -139,6 +143,8 @@ int order_orders(const void * a, const void * b){
 struct order ** orders=NULL;
 unsigned int n_orders=0, order_book_alloc_size=0;
 WINDOW * orders_window;
+WINDOW *ticker_window;
+char ticker[]="                                                                                ";
 
 void print_orders(){
 	unsigned int i;
@@ -150,8 +156,12 @@ void print_orders(){
 		orders[i]->symbol,
 		orders[i]->q,
 		orders[i]->p); }
-	fprintf(stderr,"\n");
+	//fprintf(stderr,"\n");
 	wrefresh(orders_window); }
+
+void print_ticker(){
+	mvwprintw(ticker_window,0,0,"%s",ticker);
+	wrefresh(ticker_window); }
 
 void add_order_to_internal_book
 	(
@@ -276,6 +286,8 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			const FIX44::ExecutionReport& execution_report,
 			const FIX::SessionID& session
 		){
+			long _q,d;
+			static char temp[81];
 			FIX::Symbol symbol;
 			execution_report.get(symbol);
 			if(!whether_symbol(symbol)) return;
@@ -287,6 +299,8 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			execution_report.get(sd);
 			FIX::CumQty q;
 			execution_report.get(q);
+			_q=q/multiplier;
+			d=lmin(labs(states[symbol].position),_q);
 			FIX::AvgPx p;
 			execution_report.get(p);
 			FIX::ExecType exec_type;
@@ -308,11 +322,27 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 					break; }
 				case FIX::ExecType_TRADE:{
 					if(sd==FIX::Side_SELL){
-						if(states[symbol].position<=0) states[symbol].average=(q/multiplier*p-states[symbol].average*states[symbol].position)/(q/multiplier-states[symbol].position);
-						 states[symbol].position-=q/multiplier; }
+						if
+							(states[symbol].position>0)
+							{
+								_q-=d;
+								states[symbol].position-=d; } 
+						if(states[symbol].position<=0&&_q>0){
+							states[symbol].average=(_q*p-states[symbol].average*states[symbol].position)/(_q-states[symbol].position);
+							states[symbol].position-=_q; }}
 					else if(sd==FIX::Side_BUY){
-						if(states[symbol].position>=0) states[symbol].average=(q/multiplier*p+states[symbol].average*states[symbol].position)/(q/multiplier+states[symbol].position);
-						states[symbol].position+=q/multiplier; }
+						if
+							(states[symbol].position<0)
+							{
+								_q-=d;
+								states[symbol].position+=d; }
+						if(states[symbol].position>=0&&_q>0){
+							states[symbol].average=(_q*p+states[symbol].average*states[symbol].position)/(_q+states[symbol].position);
+							states[symbol].position+=_q; }}
+					strncpy(temp,&ticker[19],60);
+					sprintf(&temp[60],"  %s %2.0g@%-7.5g",std::string(symbol).c_str(),(sd==FIX::Side_BUY)?q/multiplier:-q/multiplier,p*1.0);
+					strcpy(ticker,temp);
+					print_ticker();
 					remove_order_from_internal_book(strtol(std::string(cl_ord_id).c_str(),NULL,10));
 					print_orders();
 					break; }
@@ -424,6 +454,8 @@ int main(int argc, char ** argv){
 	wattron(f.equity_window,COLOR_PAIR(1));
 	orders_window=newwin(22,34,1,45);
 	wattron(orders_window,COLOR_PAIR(1));
+	ticker_window=newwin(1,0,23,0);
+	wattron(ticker_window,COLOR_PAIR(1));
 
 	for(i=0;(int)i<(argc-2);i++){
 		s=new struct state;
