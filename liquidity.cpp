@@ -218,7 +218,7 @@ void sigio(int signal){
 		buf[count]='\0';
 		switch(buf[0]){
 			case 'o':
-				if(sscanf(&buf[1],"%7s %d@%lg",symbol,&q,&p)!=4) DIE;
+				if(sscanf(&buf[1],"%7s %d@%lg",symbol,&q,&p)!=3) DIE;
 				send_order(FIX::Symbol(symbol),q,p,serial_id());
 				break;
 			case 'c':
