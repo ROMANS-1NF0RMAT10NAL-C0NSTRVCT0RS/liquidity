@@ -168,6 +168,7 @@ void print_orders(){
 		orders[i]->symbol,
 		orders[i]->q,
 		orders[i]->p); }
+	for(i=n_orders;i<22-n_orders;i++) mvwprintw(orders_window,i,0,"                             ");
 	//fprintf(stderr,"\n");
 	wrefresh(orders_window); }
 
@@ -186,6 +187,7 @@ void add_order_to_internal_book
 		struct order * key = new struct order();
 		key->ord_id=ord_id;
 		if(bsearch(&key,orders,n_orders,sizeof(struct order *),order_orders)){
+			fprintf(stderr,"found %u in book\n",ord_id);
 			delete key;
 			return; }
 		delete key;
@@ -323,7 +325,7 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			execution_report.get(p);
 			FIX::ExecType exec_type;
 			execution_report.get(exec_type);
-			//std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << std::endl;
+			std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << "ordid" << order_id << std::endl;
 			switch(exec_type){
 				case FIX::ExecType_NEW: {
 					FIX::OrdType ot;
