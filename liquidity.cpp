@@ -147,16 +147,6 @@ WINDOW *ticker_window;
 char ticker[]="                                                                                ";
 int control_fd;
 
-void sigio(int signal){
-	char command,symbol[8],buf[32];
-	int count,q;
-	double p;
-	while((count=read(control_fd,&buf,31))>0){
-		buf[count]='\0';
-		if(sscanf(buf,"%c%7s %d@%lg",&command,symbol,&q,&p)!=4){
-			fprintf(stderr,"could not parse: %s\n",buf);
-			return; }
-		send_order(FIX::Symbol(symbol),q,p,serial_id()); }}
 
 void print_orders(){
 	unsigned int i;
@@ -187,7 +177,7 @@ void add_order_to_internal_book
 		struct order * key = new struct order();
 		key->ord_id=ord_id;
 		if(bsearch(&key,orders,n_orders,sizeof(struct order *),order_orders)){
-			fprintf(stderr,"found %u in book\n",ord_id);
+			//fprintf(stderr,"found %u in book\n",ord_id);
 			delete key;
 			return; }
 		delete key;
@@ -208,14 +198,42 @@ void add_order_to_internal_book
 
 void remove_order_from_internal_book(const unsigned int cl_ord_id){
 	unsigned int i;
-	fprintf(stderr,"removing %u\n",cl_ord_id);
+	//fprintf(stderr,"removing %u\n",cl_ord_id);
 	for(i=0;i<n_orders;i++) if(orders[i]->cl_ord_id==cl_ord_id){
-		fprintf(stderr,"found order at %u\n",i);
+		//fprintf(stderr,"found order at %u\n",i);
 		delete orders[i];
 		n_orders--;
 		if(i!=n_orders){
 			orders[i]=orders[n_orders];
 			qsort(orders,n_orders,sizeof(struct order *),order_orders); }}}
+
+void sigio(int signal){
+	char symbol[8],buf[32];
+	int count,q;
+	unsigned int ord_id;
+	struct order * key, *target;
+	double p;
+	std::stringstream s,t;
+	while((count=read(control_fd,&buf,31))>0){
+		buf[count]='\0';
+		switch(buf[0]){
+			case 'o':
+				if(sscanf(&buf[1],"%7s %d@%lg",symbol,&q,&p)!=4) DIE;
+				send_order(FIX::Symbol(symbol),q,p,serial_id());
+				break;
+			case 'c':
+				if(sscanf(&buf[1],"%u",&ord_id)!=1) DIE;
+				key=new struct order();
+				key->ord_id=ord_id;
+				//fprintf(stderr,"canceling: lookup %u\n",key->ord_id);
+				target=*(struct order **)bsearch(&key,orders,n_orders,sizeof(struct order *),order_orders);
+				delete key;
+				//fprintf(stderr,"canceling %u\n",target->ord_id);
+				s<<target->cl_ord_id;
+				t<<target->ord_id;
+				cancel_order(FIX::Symbol(target->symbol),FIX::ClOrdID(s.str()),FIX::OrderID(t.str()),(target->q>0)?FIX::Side_BUY:FIX::Side_SELL);
+				remove_order_from_internal_book(target->cl_ord_id);
+					}}}
 
 class Fixation : public FIX::Application, public FIX::MessageCracker{
 
@@ -325,7 +343,7 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			execution_report.get(p);
 			FIX::ExecType exec_type;
 			execution_report.get(exec_type);
-			std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << "ordid" << order_id << std::endl;
+			//std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << "ordid" << order_id << std::endl;
 			switch(exec_type){
 				case FIX::ExecType_NEW: {
 					FIX::OrdType ot;
