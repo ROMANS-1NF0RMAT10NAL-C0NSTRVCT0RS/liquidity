@@ -145,6 +145,18 @@ unsigned int n_orders=0, order_book_alloc_size=0;
 WINDOW * orders_window;
 WINDOW *ticker_window;
 char ticker[]="                                                                                ";
+int control_fd;
+
+void sigio(int signal){
+	char command,symbol[8],buf[32];
+	int count,q;
+	double p;
+	while((count=read(control_fd,&buf,31))>0){
+		buf[count]='\0';
+		if(sscanf(buf,"%c%7s %d@%lg",&command,symbol,&q,&p)!=4){
+			fprintf(stderr,"could not parse: %s\n",buf);
+			return; }
+		send_order(FIX::Symbol(symbol),q,p,serial_id()); }}
 
 void print_orders(){
 	unsigned int i;
@@ -171,6 +183,12 @@ void add_order_to_internal_book
 		const int q,
 		const float p
 	){
+		struct order * key = new struct order();
+		key->ord_id=ord_id;
+		if(bsearch(&key,orders,n_orders,sizeof(struct order *),order_orders)){
+			delete key;
+			return; }
+		delete key;
 		if(n_orders+1>order_book_alloc_size){
 			if
 				(order_book_alloc_size==0)
@@ -307,8 +325,8 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			execution_report.get(exec_type);
 			//std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << std::endl;
 			switch(exec_type){
-				//case FIX::ExecType_NEW:
-				case FIX::ExecType_ORDERSTATUS:{
+				case FIX::ExecType_NEW: 
+				case FIX::ExecType_ORDERSTATUS: {
 					FIX::LeavesQty lq;
 					execution_report.get(lq);
 					add_order_to_internal_book(
@@ -456,6 +474,14 @@ int main(int argc, char ** argv){
 	wattron(orders_window,COLOR_PAIR(1));
 	ticker_window=newwin(1,0,23,0);
 	wattron(ticker_window,COLOR_PAIR(1));
+	signal(SIGIO,sigio);
+	mkfifo("/tmp/liquidity.ctl",0600);
+	if
+		(
+			(control_fd=open("/tmp/liquidity.ctl",O_RDONLY|O_NONBLOCK))==-1
+			|| fcntl(control_fd,F_SETFL,O_ASYNC|O_NONBLOCK)
+			|| fcntl(control_fd,F_SETOWN,getpid()) )
+		DIE;
 
 	for(i=0;(int)i<(argc-2);i++){
 		s=new struct state;
