@@ -46,7 +46,7 @@ unsigned int next_id=0;
 
 std::string serial_id(){
 	std::stringstream s;
-	s<<next_id++;
+	s<<rand();
 	return s.str(); }
 
 void set_header_fields(FIX::Message& message){
