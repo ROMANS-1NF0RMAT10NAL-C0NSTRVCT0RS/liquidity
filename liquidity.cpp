@@ -381,7 +381,7 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 							states[symbol].average=(_q*p+states[symbol].average*states[symbol].position)/(_q+states[symbol].position);
 							states[symbol].position+=_q; }}
 					strncpy(temp,&ticker[19],60);
-					sprintf(&temp[60],"  %s %2.0g@%-7.5g",std::string(symbol).c_str(),(sd==FIX::Side_BUY)?q/multiplier:-q/multiplier,p*1.0);
+					sprintf(&temp[60],"  %s %ld@%-7.5g",std::string(symbol).c_str(),(long)((sd==FIX::Side_BUY)?q/multiplier:-q/multiplier),p*1.0);
 					strcpy(ticker,temp);
 					print_ticker();
 					remove_order_from_internal_book(strtol(std::string(cl_ord_id).c_str(),NULL,10));
