@@ -325,7 +325,10 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			execution_report.get(exec_type);
 			//std::cerr << "received exectype " << exec_type << " clorid " << cl_ord_id << std::endl;
 			switch(exec_type){
-				case FIX::ExecType_NEW: 
+				case FIX::ExecType_NEW: {
+					FIX::OrdType ot;
+					execution_report.get(ot);
+					if(ot==FIX::OrdType_MARKET) return; }
 				case FIX::ExecType_ORDERSTATUS: {
 					FIX::LeavesQty lq;
 					execution_report.get(lq);
@@ -494,9 +497,9 @@ int main(int argc, char ** argv){
 	FIX::SessionSettings settings(argv[1]);
 	read_settings(argv[1],sender_comp_id,target_comp_id,target_sub_id,username,password,account);
 	FIX::FileStoreFactory data_store(settings);
-	//FIX::FileLogFactory log_factory(settings);
-	//FIX::SocketInitiator socket_initiator(sf,data_store,settings,log_factory);
-	FIX::SocketInitiator socket_initiator(sf,data_store,settings);
+	FIX::FileLogFactory log_factory(settings);
+	FIX::SocketInitiator socket_initiator(sf,data_store,settings,log_factory);
+	//FIX::SocketInitiator socket_initiator(sf,data_store,settings);
 	socket_initiator.start();
 
 	FIX44::MarketDataRequest market_data_request(
