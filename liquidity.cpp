@@ -54,6 +54,24 @@ void set_header_fields(FIX::Message& message){
 	message.getHeader().setField(FIX::TargetCompID(target_comp_id));
 	message.getHeader().setField(FIX::TargetSubID(target_sub_id)); }
 
+void market_order(const char * const symbol, long v, const char * const cl_ord_id){
+	FIX44::NewOrderSingle order(
+		FIX::ClOrdID(cl_ord_id),
+		(v>0)?
+			FIX::Side(FIX::Side_BUY):
+			FIX::Side(FIX::Side_SELL),
+		FIX::TransactTime(),
+		FIX::OrdType(FIX::OrdType_MARKET));
+	set_header_fields(order);
+	if(v>0)
+		order.set(FIX::OrderQty(multiplier*v));
+		else order.set(FIX::OrderQty(multiplier*-v));
+	order.set(FIX::HandlInst('1'));
+	order.set(FIX::Symbol(symbol));
+	order.set(FIX::TimeInForce(FIX::TimeInForce_GOOD_TILL_CANCEL));
+	order.set(FIX::Account(account));
+	FIX::Session::sendToTarget(order); }
+
 void send_order(FIX::Symbol symbol, double v, double p, const std::string& cl_ord_id){
 	FIX44::NewOrderSingle order(
 		FIX::ClOrdID(cl_ord_id),
@@ -218,8 +236,12 @@ void sigio(int signal){
 		buf[count]='\0';
 		switch(buf[0]){
 			case 'o':
-				if(sscanf(&buf[1],"%7s %d@%lg",symbol,&q,&p)!=3) DIE;
+				if(sscanf(&buf[1],"%7s%d@%lg",symbol,&q,&p)!=3) DIE;
 				send_order(FIX::Symbol(symbol),q,p,serial_id());
+				break;
+			case 'm':
+				if(sscanf(&buf[1],"%7s%d",symbol,&q)!=2) DIE;
+				market_order(symbol,q,serial_id().c_str());
 				break;
 			case 'c':
 				if(sscanf(&buf[1],"%u",&ord_id)!=1) DIE;
@@ -325,7 +347,8 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 			const FIX::SessionID& session
 		){
 			long _q,d;
-			static char temp[81];
+			int l;
+			static char print[22],temp[81];
 			FIX::Symbol symbol;
 			execution_report.get(symbol);
 			if(!whether_symbol(symbol)) return;
@@ -380,15 +403,17 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 						if(states[symbol].position>=0&&_q>0){
 							states[symbol].average=(_q*p+states[symbol].average*states[symbol].position)/(_q+states[symbol].position);
 							states[symbol].position+=_q; }}
-					strncpy(temp,&ticker[19],60);
-					sprintf(&temp[60],"  %s %ld@%-7.5g",std::string(symbol).c_str(),(long)((sd==FIX::Side_BUY)?q/multiplier:-q/multiplier),p*1.0);
+					sprintf(print," %s%ld@%-7.5g",std::string(symbol).c_str(),(long)((sd==FIX::Side_BUY)?q/multiplier:-q/multiplier),p*1.0);
+					l=strlen(print);
+					strcpy(temp,&ticker[l]);
+					strcpy(&temp[80-l],print);
 					strcpy(ticker,temp);
 					print_ticker();
 					remove_order_from_internal_book(strtol(std::string(cl_ord_id).c_str(),NULL,10));
 					print_orders();
 					break; }
 				case FIX::ExecType_REJECTED:
-					std::cout << cl_ord_id << " rejected" << std::endl;
+					std::cerr << cl_ord_id << " rejected" << std::endl;
 					break;
 				case FIX::ExecType_CANCELED:
 					FIX::OrigClOrdID orig_cl_ord_id;
@@ -517,9 +542,9 @@ int main(int argc, char ** argv){
 	FIX::SessionSettings settings(argv[1]);
 	read_settings(argv[1],sender_comp_id,target_comp_id,target_sub_id,username,password,account);
 	FIX::FileStoreFactory data_store(settings);
-	FIX::FileLogFactory log_factory(settings);
-	FIX::SocketInitiator socket_initiator(sf,data_store,settings,log_factory);
-	//FIX::SocketInitiator socket_initiator(sf,data_store,settings);
+	//FIX::FileLogFactory log_factory(settings);
+	//FIX::SocketInitiator socket_initiator(sf,data_store,settings,log_factory);
+	FIX::SocketInitiator socket_initiator(sf,data_store,settings);
 	socket_initiator.start();
 
 	FIX44::MarketDataRequest market_data_request(
