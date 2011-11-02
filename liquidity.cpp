@@ -403,7 +403,7 @@ class Fixation : public FIX::Application, public FIX::MessageCracker{
 						if(states[symbol].position>=0&&_q>0){
 							states[symbol].average=(_q*p+states[symbol].average*states[symbol].position)/(_q+states[symbol].position);
 							states[symbol].position+=_q; }}
-					sprintf(print," %s%ld@%-7.5g",std::string(symbol).c_str(),(long)((sd==FIX::Side_BUY)?q/multiplier:-q/multiplier),p*1.0);
+					sprintf(print," %s%ld@%-.5g",std::string(symbol).c_str(),(long)((sd==FIX::Side_BUY)?q/multiplier:-q/multiplier),p*1.0);
 					l=strlen(print);
 					strcpy(temp,&ticker[l]);
 					strcpy(&temp[80-l],print);
